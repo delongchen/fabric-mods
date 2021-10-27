@@ -1,7 +1,6 @@
 import { Controller, Get, Res, Param } from "@nestjs/common";
 import { getZip } from "./zip.service";
 import { Response } from "express";
-import { SideType } from "../../types/FabricMod";
 
 function setDownloadHeader(res: Response, name: string) {
   res.setHeader('Content-Type', 'application/octet-stream')
@@ -21,7 +20,7 @@ export class ZipController {
       })
     } else {
       setDownloadHeader(res, `${side}Mods.zip`)
-      res.send(getZip(<SideType>side))
+      res.send(getZip(side))
     }
   }
 }

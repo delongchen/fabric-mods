@@ -1,11 +1,12 @@
 import { Controller, Get, Res } from "@nestjs/common";
-import { getMods } from "../../core/store";
 import { Response } from "express";
+import { ModsStore } from "../../core/store";
+import { SideType } from "../../types/FabricMod";
 
 @Controller('/info')
 export class InfoController {
   @Get('mods')
   info(@Res() res: Response) {
-    res.json(getMods('both'))
+    res.json([...ModsStore[SideType.both].mods.values()])
   }
 }

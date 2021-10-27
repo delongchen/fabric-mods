@@ -1,115 +1,100 @@
 import { FabricMod, SideType } from "../types/FabricMod";
+import AdmZip = require("adm-zip");
+import config from "../config";
+import { createLogger } from "bunyan";
+
+type ModMap = Map<string, FabricMod>
 
 const fileToModMap = new Map<string, string>();
-const modsMap = new Map<string, FabricMod>();
 const existMods = new Set<string>();
-const status = {
-  changed: {
-    server: true,
-    client: true
-  }
+const logger = createLogger({
+  name: "Mods Store",
+  stream: process.stdout
+});
+
+const modMaps: ModMap[] = [
+  new Map<string, FabricMod>(),
+  new Map<string, FabricMod>(),
+  new Map<string, FabricMod>()
+];
+const zips: AdmZip[] = [new AdmZip, new AdmZip, new AdmZip];
+
+const [server, client, both] = modMaps;
+const [serverZip, clientZip, bothZip] = zips;
+
+interface ModsStoreRecord {
+  mods: ModMap,
+  zip: AdmZip
 }
 
-const modsStore = {
-  server: <FabricMod[]>[],
-  client: <FabricMod[]>[],
-  uk: <FabricMod[]>[],
-  all: <FabricMod[]>[]
-};
+class ModsStore {
+  static [SideType.server]: ModsStoreRecord = { mods: server, zip: serverZip };
+  static [SideType.client]: ModsStoreRecord = { mods: client, zip: clientZip };
+  static [SideType.both]: ModsStoreRecord = { mods: both, zip: bothZip };
 
-function setChanged(mod: FabricMod) {
-  status.changed[
-    (mod.modRaw.environment === 'client' ? 'client' : 'server')
-    ] = true
+  static deleteMod(modId: string) {
+    const mod = both.get(modId);
+    if (mod) {
+      const { side, file: fileName } = mod.mate;
+      const { mods, zip } = ModsStore[side];
+      mods.delete(mod.modRaw.id);
+      zip.deleteFile(zip.getEntry(fileName));
+    }
+    return mod;
+  }
+
+  static addMod(mod: FabricMod) {
+    const { side, file: fileName, zipData } = mod.mate;
+    const { mods, zip } = ModsStore[side];
+    mods.set(mod.modRaw.id, mod);
+    zip.addFile(fileName, zipData);
+  }
 }
 
 function deleteMods(toDelete: string[]) {
   if (toDelete.length) {
+    const deletedMods: FabricMod[] = [];
     for (const modName of toDelete) {
       const modId = fileToModMap.get(modName);
-      const mod = modsMap.get(modId)
 
       if (modId) {
-        console.log(`delete ${mod.modRaw.name}`);
         existMods.delete(modName);
         fileToModMap.delete(modName);
-        modsMap.delete(modId);
-        setChanged(mod)
+        const deletedMod = ModsStore.deleteMod(modId);
+        deletedMods.push(deletedMod);
       }
     }
+    doUpdate("del", deletedMods);
   }
 }
 
 function addMods(toAdd: FabricMod[]) {
   if (toAdd.length) {
     for (const mod of toAdd) {
-      console.log(`load ${mod.modRaw.name}`);
-      const fileName = mod.mate.file;
+      const { file: fileName } = mod.mate;
       const modId = mod.modRaw.id;
       existMods.add(fileName);
       fileToModMap.set(fileName, modId);
-      modsMap.set(modId, mod);
-      setChanged(mod)
+      ModsStore.addMod(mod);
     }
+    doUpdate("add", toAdd);
   }
 }
 
-function freshMods() {
-  const mods = Array.from(modsMap.values());
-  const { server, client, uk } = modsStore;
-  server.length = 0
-  client.length = 0
-  uk.length = 0
-  modsStore.all = mods
-
-  for (const mod of mods) {
-    const env = mod.modRaw.environment;
-    if (env) {
-      switch (env) {
-        case "*":
-          server.push(mod);
-          client.push(mod);
-          break;
-        case "server":
-          server.push(mod);
-          break;
-        case "client":
-          client.push(mod);
-          break;
-        default:
-          uk.push(mod);
-      }
-    } else {
-      client.push(mod);
-      server.push(mod);
-      uk.push(mod);
-    }
-  }
-
-  status.changed.server = false
-  status.changed.client = false
-}
-
-function getMods(side: SideType): { mods: FabricMod[], changed: boolean } {
-  if (side === 'both') {
-    const changed = status.changed.server || status.changed.client
-    if (changed) freshMods()
-    return { mods: modsStore.all, changed }
-  } else {
-    const changed = status.changed[side]
-    if (changed) freshMods()
-    return { mods: modsStore[side], changed }
-  }
-}
+type UpdateAction = "add" | "del"
+type AutoUpdateHook = (action: UpdateAction, changeMods: FabricMod[]) => void
+const updateList: AutoUpdateHook[] = [];
+const doUpdate = (action: UpdateAction, changeMods: FabricMod[]) => {
+  updateList.forEach(it => it(action, changeMods));
+  logger.info({ action, mods: changeMods.map(it => it.modRaw.name), all: changeMods.length });
+};
+const useAutoUpdate = (hook: AutoUpdateHook) => updateList.push(hook);
 
 export {
   fileToModMap,
-  modsMap,
   existMods,
   deleteMods,
   addMods,
-  status,
-  modsStore,
-  freshMods,
-  getMods
+  useAutoUpdate,
+  ModsStore
 };

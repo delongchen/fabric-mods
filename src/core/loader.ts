@@ -1,5 +1,5 @@
 import { opendir } from 'fs/promises'
-import { FabricMod, FabricModRaw } from "../types/FabricMod";
+import { FabricMod, FabricModRaw, SideType } from "../types/FabricMod";
 import { existMods, deleteMods, addMods } from "./store";
 import config from "../config";
 import AdmZip = require('adm-zip')
@@ -19,6 +19,15 @@ async function readModsDir() {
   return jars
 }
 
+const getModEnv = (s: string): SideType => {
+  switch (s) {
+    case '*': return SideType.both
+    case 'client': return SideType.client
+    case 'sever': return SideType.server
+    default: return SideType.both
+  }
+}
+
 function loadOneMod(fileName: string) {
   return new Promise<FabricMod>((resolve, reject) => {
     const zip = new AdmZip(config.modsDir + fileName)
@@ -31,7 +40,7 @@ function loadOneMod(fileName: string) {
           const modRaw = <FabricModRaw>JSON.parse(json)
           resolve({
             modRaw,
-            mate: { file: fileName }
+            mate: { file: fileName, side: getModEnv(modRaw.environment), zipData: zip.toBuffer()}
           })
         }
       })

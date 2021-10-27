@@ -1,3 +1,5 @@
+import AdmZip from "adm-zip";
+
 interface Contact {
   email?: string
   irc?: string
@@ -58,11 +60,17 @@ interface FabricModRaw {
 interface FabricMod {
   modRaw: FabricModRaw
   mate: {
-    file: string
+    file: string,
+    side: SideType,
+    zipData: Buffer
   }
 }
 
-type SideType = 'client' | 'server' | 'both'
+enum SideType {
+  client,
+  server,
+  both
+}
 
 export {
   FabricModRaw,
