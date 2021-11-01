@@ -1,6 +1,5 @@
 import { FabricMod, SideType } from "../types/FabricMod";
 import AdmZip = require("adm-zip");
-import config from "../config";
 import { createLogger } from "bunyan";
 
 type ModMap = Map<string, FabricMod>
@@ -48,6 +47,7 @@ class ModsStore {
     const { mods, zip } = ModsStore[side];
     mods.set(mod.modRaw.id, mod);
     zip.addFile(fileName, zipData);
+    delete mod.mate.zipData
   }
 }
 
